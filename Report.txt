@@ -1,0 +1,140 @@
+
+Project Goal
+Implementation of the PRISM Algorithm to Induce Classification Rules
+
+
+Background
+The ID3 algorithm that partitioned a dataset to induce decision trees gained popularity after it was introduced by Quinlan in 1979.  However, J. Cendrowski presented an alternative to the decision tree structure in 19871.  He described the limitations inherent in a decision tree structure, as well as critical shortcomings when it was used in expert systems.  He presented rule learning as an alternative.  He provided the information theory and the algorithm behind a separate and conquer strategy.  He used a opthalmology data-set to illustrate how the algorithm worked.  Comparisons with the decision tree algorithm were made.  
+
+Project Scope
+I implemented the algorithm in R.  This report describes the implementation details.
+
+PRISM
+At its core, the algorithm finds the feature-value pair that maximizes the information about a class.
+
+
+
+Where I is the Information function of δn  condition on αx.   δn  and αx are class n and feature x in a dataset respectively.  p( δn   |  αx)  is the conditional probability of class n being true on the condition that feature x occurs.
+
+The denominator of the expression is the probability of class n.  Since this probability is not based on how feature-value pairs are chosen to partition the data, it is a constant for all alpha's.  Therefore, the algorithm is reduced to finding the feature value pair that maximizes the conditional probability for a specific class.  A feature value pair covers a class when it is a condition for the class to be true.   By combining these feature value pairs with the AND function, a rule can be constructed to predict that the class as an outcome.  A rule “covers” a class when it can successfully predicts that the class is 1 and all other classes are 0s.  The cases covered are “positive” cases.  
+
+Implementation
+Ian Witten explains how the algorithm works in his book2 .  “Covering algorithms operate by adding tests to the rule that is under construction, always striving to create a rule with maximum accuracy... (it) involves finding an attribute to split on.”  Once found, the feature value pair is a term added to a rule.  The new term restricts the coverage of the rule.  The objective is to include as many instances of the desired class as possible and exclude as many instances of the other classes as possible.  Suppose the new rule will cover a total of t instances, of which p are positive examples of the class and t-p are in the other classes, then choose the term that maximizes the ratio p/t.
+
+The algorithm then finds the next feature-value pair that provides the maximum information (p/t) and add that to the rule.  
+
+Using the contact lens data set to illustrate the concept, one begins with an empty rule:
+
+	If ?, then hard contact lens.
+
+Scanning the dataset (included in the Appendix), there are 9 choices:
+	
+	
+age=young
+2/8
+age=pre-presbyopic
+1/8
+Age=presbyopic
+1/8
+Spectacle = Myope
+3/12
+Spectacle = Hypermetrope
+1/12
+Astigmatism=no
+0/12
+Astigmatism=yes
+4/12
+Tear rate=reduced
+0/12
+Tear rate=normal
+4/12
+
+The right column shows the fraction of positive cases in the set filtered by the terms on the left.  Since the objective is to identify terms that provide the most information (p( δn   |  αx)), astigmatism and tear rate are top candidate feature-value pairs.  A tie in the p/t ratio is arbitrarily broken.  However, in the event that one choice covers more examples than the other (say 3/9), the tie is broken in favor of the one that covers more examples (say 4/12).
+
+The rule formed at this stage:
+	If astigmatism = true, then hard contact lens
+
+This rule is inaccurate at this point because it gets only 4 instances correct out of 12 that it covers.   The step is to select all examples in the dataset where the rule holds and identify the next feature value pair that provides the most information, that is,
+
+	If astigmatism = true and ? then hard contact lens
+
+Repeating the same process, tear production rate with a p/t ratio of 4/6 is identified and it is added to the rule:
+	
+	If astigmatism =true and tear production rate = normal, then hard contact lens
+
+Again the rule is not perfect because it is accurate in 67% of the cases it covers.   Taking the process one step further, the feature value pair Spectacle = Myope is identified.  The p/t ratio is 1.
+
+	If astigmatism=true and tear production rate=normal and spectacle = myope, then hard  
+
+Induction for this particular rule stops here because it is accurate in 100% of the cases it covers.  Adding more terms will not increase the accuracy further.
+
+In my implementation, the function that calculates p/t and returns the term with the highest ratio is named ruleEngine.  It is the core of the PRISM algorithm.  
+
+RuleEngine is called by RuleEngine2.   The calling function is responsible for adding terms to the rule under construction.  It iterates over the cases covered by the existing terms and find new terms until it runs of features or positive cases.
+
+The rule above covers only 3 of the 4 hard contact lens examples.  So the algorithm deletes these 3 from the set of instances and starts again.   Deleting instances, building additional rules and checking for stopping conditions is the responsibility of ruleEngine 3.  This function initializes the variables and looks for new rules until the ruleset is perfect.  A ruleset is perfect if it covers all cases of a specific class.  Ian Witten provided the pseudo code in his book2.  
+For each class C
+	Initialize E to the instance set
+ 	While E contains instances in class C
+		Create a rule R with an empty left-hand side that predicts class C
+		Until R is perfect (or there are no more attributes to use) do
+			For each attribute A not mentioned in R, and each value of v
+				Consider adding the condition A=v to the LHS of R
+		ruleEngine	Select A and v to maximize the accuracy p/t
+			Add A=v to R
+		Remove the instances covered by R from E
+
+Fig. 1 – ruleEngine function
+
+
+
+
+
+For each class C
+	Initialize E to the instance set
+ 	While E contains instances in class C
+		Create a rule R with an empty left-hand side that predicts class C
+		Until R is perfect (or there are no more attributes to use) do
+			For each attribute A not mentioned in R, and each value of v
+				Consider adding the condition A=v to the LHS of R
+	ruleEngine2		Select A and v to maximize the accuracy p/t
+			Add A=v to R
+		Remove the instances covered by R from E
+
+Fig 2 – ruleEngine2 function
+
+For each class C
+	Initialize E to the instance set
+ 	While E contains instances in class C
+		Create a rule R with an empty left-hand side that predicts class C
+ruleEngine3	Until R is perfect (or there are no more attributes to use) do
+			For each attribute A not mentioned in R, and each value of v
+				Consider adding the condition A=v to the LHS of R
+				Select A and v to maximize the accuracy p/t
+			Add A=v to R
+		Remove the instances covered by R from E
+Fig 3 – ruleEngine 3 function
+
+
+The first 2 lines of pseudo code is handled in the main module that calls ruleEngin3 with the class and the dataset as arguments.  Assuming the dataset can be completely covered by a set of rules, ruleEngine3 returns the rule set for the class specified.
+
+Results
+
+The R console output for ruleEngine3 on the opthalmology dataset is shown below.
+
+> ruleEngine3(1,contactlens) [1] "Recommend is hard if Astig = yes and Tear.Rate = normal and spectacle.pres = myope" [1] "The rule set is not perfect yet" [1] "Recommend is hard if age = young and Astig = yes and Tear.Rate = normal" [1] "The Rule Set is now perfect" [1] " " NULL > ruleEngine3(2,contactlens) [1] "Recommend is soft if Astig = no and Tear.Rate = normal and spectacle.pres = hypermetrope" [1] "The rule set is not perfect yet" [1] "Recommend is soft if Astig = no and Tear.Rate = normal and age = young" [1] "The rule set is not perfect yet" [1] "Recommend is soft if age = pre-pres and Astig = no and Tear.Rate = normal" [1] "The Rule Set is now perfect" [1] " " NULL > ruleEngine3(3,contactlens) [1] "Recommend is none if Tear.Rate = reduced" [1] "The rule set is not perfect yet" [1] "Recommend is none if age = pres and Tear.Rate = normal and spectacle.pres = myope and Astig = no" [1] "The rule set is not perfect yet" [1] "Recommend is none if spectacle.pres = hypermetrope and Astig = yes and age = pre-pres" [1] "The rule set is not perfect yet" [1] "Recommend is none if age = pres and spectacle.pres = hypermetrope and Astig = yes" [1] "The Rule Set is now perfect" 
+
+Future Work
+Cendrowski's paper includes corner cases that are not covered in this project.  It discusses heuristics on choosing among two or more feature-value pairs that produce the same p/t ratio and when one of them can produce an irrelevant rule.   
+
+Ian Witten's book includes a discussion on rule and tree induction algorithms over fitting noisy data.  In noisy situations, one may not want to induce perfect rules even on the training set.  With a measure for the “goodness”, it is possible to abandon the class-by-class approach in favor of getting the very best general rule, regardless of which class it predicts.  The idea of incremental reduced error pruning was presented in a series of papers3,4 starting around 1994.   These are interesting projects that build on the PRISM algorithm.
+
+Cohen's paper on “Efficient Pruning Methods for Separate and Conquer Rule Learning System”5 presented formal arguments and experimental data supporting the claim that separate and conquer algorithms such as PRISM do not scale up well on noisy data.  He then provided a solution in the form of pruning techniques that improved the runtime of rule induction methods with no loss in accuracy.  It is another project than can be built on the basic algorithm studied here.
+
+References: 
+1.  Cendrowski, J. 1987. PRISM: An algorithm for inducing modular rules.  International Journal of Man-Machine Studies
+2.  Witten, I. 2005.  Data Mining Practical Machine Learning Tools and Techniques
+3.  FurnKrantz, J., and G. Widmer, 1994.  Incremental redced-error pruning.  Proceedings of the Eleventh International Conference on Machine Learning.
+4.  Cohen, W. W. 1995.  Fast effective rule induction.  Proceedings of the Twelfth International Conference on Machine Learning.
+5.  Cohen, W. W. 1993. Efficient Pruing Methods for Separate-and-Conquer Rule Learning Systems.  Proceedings of the Thirteenth International Joint Conference on Artificial Intelligence.
+
